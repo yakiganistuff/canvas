@@ -23,7 +23,12 @@ export function body(req) {
   try { return JSON.parse(req.body || "{}"); } catch { return {}; }
 }
 export const validId = (s) => typeof s === "string" && /^[a-z0-9][a-z0-9\-_]{1,39}$/.test(s);
-export const slug = (s) => String(s || "").trim().toLowerCase();
+export const slug = (s) => String(s || "").trim().toLowerCase().replace(/\s+/g, "-");
+/** Builds a valid id from any text (Hebrew included); falls back to prefix + random. */
+export function makeId(text, prefix) {
+  const latin = slug(text).replace(/[^a-z0-9\-_]/g, "").replace(/-+/g, "-").replace(/^[-_]+|[-_]+$/g, "").slice(0, 30);
+  return validId(latin) ? latin : `${prefix}-${crypto.randomBytes(3).toString("hex")}`;
+}
 
 /* ---------- passwords ---------- */
 export function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {

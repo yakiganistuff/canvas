@@ -233,8 +233,7 @@ function projectsPane(){
   const all = [...projCache].sort((a,b) => (a.org+a.id).localeCompare(b.org+b.id));
   return `<div class="list">
     <form class="formrow" id="npForm">
-      <div class="field"><label for="npId">מזהה פרויקט (באנגלית)</label><input class="input" id="npId" dir="ltr" placeholder="st-talent"></div>
-      <div class="field"><label for="npName">שם לתצוגה</label><input class="input" id="npName" placeholder="מנוף הכישרונות"></div>
+      <div class="field"><label for="npName">שם הפרויקט</label><input class="input" id="npName" placeholder="מנוף הכישרונות"></div>
       ${isAdmin() ? `<div class="field"><label for="npOrg">ארגון</label><select class="input" id="npOrg">${orgOptions(defOrg)}</select></div>` : ""}
       <button class="btn small" type="submit">יצירת פרויקט</button>
       <div style="flex-basis:100%"><div class="meta" style="margin-bottom:6px">שיוך משתמשות</div><div class="checks" id="npMembers">${membersChecks(defOrg, [], "npm")}</div></div>
@@ -272,7 +271,6 @@ function usersPane(){
 function orgsPane(){
   return `<div class="list">
     <form class="formrow" id="noForm">
-      <div class="field"><label for="noId">מזהה ארגון (באנגלית)</label><input class="input" id="noId" dir="ltr" placeholder="strauss"></div>
       <div class="field"><label for="noName">שם הארגון</label><input class="input" id="noName" placeholder="שטראוס"></div>
       <button class="btn small" type="submit">הוספת ארגון</button>
     </form>
@@ -303,7 +301,7 @@ function wireMgmt(){
     if (orgSel) orgSel.onchange = () => { document.getElementById("npMembers").innerHTML = membersChecks(orgSel.value, [], "npm"); };
     np.addEventListener("submit", e => {
       e.preventDefault();
-      act({ action: "createProject", id: document.getElementById("npId").value, name: document.getElementById("npName").value,
+      act({ action: "createProject", name: document.getElementById("npName").value,
         org: orgSel ? orgSel.value : me.org, members: [...np.querySelectorAll('input[name="npm"]:checked')].map(i => i.value) }, "הפרויקט נוצר");
     });
   }
@@ -333,7 +331,7 @@ function wireMgmt(){
   const no = document.getElementById("noForm");
   if (no) no.addEventListener("submit", e => {
     e.preventDefault(); mgmtTab = "orgs";
-    act({ action: "createOrg", id: document.getElementById("noId").value, name: document.getElementById("noName").value }, "הארגון נוסף");
+    act({ action: "createOrg", name: document.getElementById("noName").value }, "הארגון נוסף");
   });
   app.querySelectorAll(".item[data-oid]").forEach(it => {
     const id = it.dataset.oid;

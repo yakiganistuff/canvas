@@ -1,4 +1,4 @@
-import { redis, send, bad, body, slug, validId, requireUser, getUser, getOrg, getProject, getMany, hashPassword, canManageOrg } from "./_lib.js";
+import { redis, send, bad, body, slug, validId, makeId, requireUser, getUser, getOrg, getProject, getMany, hashPassword, canManageOrg } from "./_lib.js";
 
 // POST {action, ...}: management for admins (everything) and managers (their own org).
 export default async function handler(req, res) {
@@ -13,9 +13,10 @@ export default async function handler(req, res) {
     /* ----- orgs (admin only) ----- */
     case "createOrg": {
       if (!isAdmin) return bad(res, "אין הרשאה", 403);
-      const id = slug(b.id), name = String(b.name || "").trim();
-      if (!validId(id) || !name) return bad(res, "מזהה באנגלית ושם לארגון");
-      if (await getOrg(id)) return bad(res, "הארגון כבר קיים");
+      const name = String(b.name || "").trim();
+      if (!name) return bad(res, "צריך שם לארגון");
+      let id = makeId(b.id || name, "org");
+      if (await getOrg(id)) id = makeId("", id);
       await redis.set(`org:${id}`, { name, context: String(b.context || ""), at: Date.now() });
       await redis.sadd("orgs", id);
       return send(res, 200, { ok: true });
@@ -31,7 +32,7 @@ export default async function handler(req, res) {
     /* ----- users ----- */
     case "createUser": {
       const id = slug(b.id), name = String(b.name || "").trim() || id, role = b.role;
-      if (!validId(id)) return bad(res, "שם משתמש באנגלית: אותיות, ספרות ומקף");
+      if (!validId(id)) return bad(res, "שם המשתמש צריך להיות באנגלית: אותיות, ספרות ומקף, לפחות 2 תווים");
       if (!b.password || String(b.password).length < 6) return bad(res, "סיסמה של 6 תווים לפחות");
       if (!["member", "manager", "admin"].includes(role)) return bad(res, "תפקיד לא מוכר");
       if (!isAdmin && role === "admin") return bad(res, "אין הרשאה", 403);
@@ -67,12 +68,13 @@ export default async function handler(req, res) {
 
     /* ----- projects ----- */
     case "createProject": {
-      const id = slug(b.id), name = String(b.name || "").trim() || id;
-      const org = isAdmin ? slug(b.org) : me.org;
-      if (!validId(id)) return bad(res, "מזהה באנגלית: אותיות, ספרות ומקף");
+      const name = String(b.name || "").trim();
+      if (!name) return bad(res, "צריך שם לפרויקט");
+      const org = isAdmin ? String(b.org || "") : me.org;
+      let id = makeId(b.id || name, "p");
       if (!(await getOrg(org))) return bad(res, "צריך לבחור ארגון קיים");
       if (!canManageOrg(me, org)) return bad(res, "אין הרשאה", 403);
-      if (await getProject(id)) return bad(res, "המזהה הזה כבר תפוס");
+      if (await getProject(id)) id = makeId("", id);
       const members = await validMembers(b.members, org);
       await redis.set(`project:${id}`, { name, org, members, at: Date.now() });
       await redis.sadd("projects", id);
