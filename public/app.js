@@ -431,12 +431,12 @@ function renderCanvas(){
 }
 
 /* ---------------- editor + coach overlay ---------------- */
-let cur = null, draft = null, coachOpen = false, thread = [], ctrl = null;
+let cur = null, draft = null, coachOpen = false, thread = [], ctrl = null, threadFor = null;
 
 function openEditor(k, coach = false){
   if (document.getElementById("overlay")) return;
   cur = k; draft = k ? JSON.parse(JSON.stringify(getVal(k))) : null;
-  coachOpen = coach || !k; thread = [];
+  coachOpen = coach || !k; thread = []; threadFor = null;
   const ov = document.createElement("div"); ov.className = "overlay"; ov.id = "overlay";
   ov.addEventListener("mousedown", e => { if (e.target === ov) closeEditor(); });
   document.body.appendChild(ov);
@@ -456,7 +456,7 @@ function drawOverlay(){
   const ov = document.getElementById("overlay"); if (!ov) return;
   ov.innerHTML = (cur ? editorHtml() : "") + (coachOpen ? coachHtml() : "");
   if (cur) wireEditor();
-  if (coachOpen) wireCoach();
+  if (coachOpen){ wireCoach(); loadThread(); }
 }
 function editorHtml(){
   const b = B[cur], t = b.type;
@@ -520,11 +520,29 @@ function coachHtml(){
   const modes = cur ? MODES : REVIEW_MODES;
   const title = cur ? `המאמן · ${B[cur].label}` : "המאמן · כל הקנבס";
   return `<aside class="coach" aria-label="המאמן">
-    <div class="co-head"><h3>${esc(title)}</h3>${cur ? "" : `<button class="btn ghost small" id="coClose">סגירה</button>`}</div>
+    <div class="co-head"><h3>${esc(title)}</h3><button class="btn ghost small" id="coClear" title="מחיקת השיחה השמורה בקוביה הזו">ניקוי שיחה</button>${cur ? "" : `<button class="btn ghost small" id="coClose">סגירה</button>`}</div>
     <div class="chips">${modes.map(m => `<button class="chip" data-m="${m[0]}">${esc(m[1])}</button>`).join("")}</div>
     <div class="msgs" id="coMsgs"></div>
     <form class="co-input" id="coForm"><textarea id="coIn" rows="1" placeholder="כתבו למאמן…"></textarea><button class="btn small" type="submit">שליחה</button></form>
   </aside>`;
+}
+const threadKeyNow = () => cur || "_review";
+async function loadThread(){
+  const key = threadKeyNow();
+  if (threadFor === key) return;
+  threadFor = key;
+  try{
+    const j = await api(`/api/thread?project=${encodeURIComponent(project.id)}&key=${encodeURIComponent(key)}`);
+    if (threadFor !== key) return;
+    // keep anything asked while loading, after the saved history
+    thread = (j.messages || []).map(m => ({ role: m.role, text: m.text, sugg: m.sugg || null, at: m.at })).concat(thread);
+    drawMsgs();
+  }catch(e){}
+}
+async function clearThread(btn){
+  if (!confirmTwice(btn, "thread")) return;
+  try{ await api("/api/thread", { project: project.id, key: threadKeyNow(), clear: true }); thread = []; drawMsgs(); toast("השיחה נמחקה"); }
+  catch(e){ toast(e.message); }
 }
 function msgHtml(m, i){
   if (m.role === "me") return `<div class="msg me">${esc(m.text)}</div>`;
@@ -534,13 +552,14 @@ function msgHtml(m, i){
 function drawMsgs(){
   const box = document.getElementById("coMsgs"); if (!box) return;
   box.innerHTML = thread.length ? thread.map(msgHtml).join("") :
-    `<div class="co-empty">${cur ? "בחרו כיוון למעלה, או כתבו שאלה משלכן. המאמן רואה את מה שכתוב עכשיו בקוביה, גם לפני שמירה." : "המאמן קורא את כל הקנבס השמור ונותן מבט על."}</div>`;
+    `<div class="co-empty">${cur ? "בחרו כיוון למעלה, או כתבו שאלה משלכן. המאמן רואה את מה שכתוב עכשיו בקוביה, גם לפני שמירה. השיחה נשמרת וממתינה לכן גם בפעם הבאה." : "המאמן קורא את כל הקנבס השמור ונותן מבט על. השיחה נשמרת."}</div>`;
   box.scrollTop = box.scrollHeight;
   box.querySelectorAll("[data-apply]").forEach(b => b.onclick = () => applySugg(thread[+b.dataset.apply].sugg));
 }
 function wireCoach(){
   const ov = document.getElementById("overlay");
   const cc = ov.querySelector("#coClose"); if (cc) cc.onclick = closeEditor;
+  ov.querySelector("#coClear").onclick = ev => clearThread(ev.currentTarget);
   ov.querySelectorAll(".chip").forEach(b => b.onclick = () => {
     const m = (cur ? MODES : REVIEW_MODES).find(x => x[0] === b.dataset.m); ask(m[1], m[2]);
   });
@@ -595,7 +614,7 @@ async function ask(userText, modeInstr){
   let full = "";
   try{
     const r = await fetch("/api/coach", { method: "POST", credentials: "same-origin", signal: ctrl.signal,
-      headers: { "Content-Type": "application/json" }, body: JSON.stringify({ project: project.id, prompt }) });
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify({ project: project.id, prompt, key: threadKeyNow(), userText }) });
     if (!r.ok){ let j = {}; try{ j = await r.json(); }catch(e){} throw new Error(j.error || "המאמן לא הצליח לענות כרגע. נסו שוב."); }
     const reader = r.body.getReader(), dec = new TextDecoder();
     for (;;){

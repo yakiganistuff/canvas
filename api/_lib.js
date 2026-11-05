@@ -101,6 +101,10 @@ export async function requireUser(req, res) {
   return { id, ...u };
 }
 
+/* ---------- coach conversations: per project, per person, per block ---------- */
+const BLOCK_KEYS = new Set(["name","lead","why","scope","aud","kpi","success","hr_struct","hr_proc","hr_mind","needs","gives","tension","timeline"]);
+export const threadKey = (project, userId, key) => `coach:${project}:${userId}:${BLOCK_KEYS.has(key) ? key : "_review"}`;
+
 /* ---------- permissions ---------- */
 export function canSee(me, p) {
   if (!me || !p) return false;

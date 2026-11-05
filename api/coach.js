@@ -1,9 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { bad, body, requireUser, getProject, getOrg, canSee } from "./_lib.js";
+import { redis, bad, body, requireUser, getProject, getOrg, canSee, threadKey } from "./_lib.js";
 
 const MODEL = process.env.COACH_MODEL || "claude-sonnet-5-5";
 
-// POST {project, prompt}: streams the coach's answer as plain text.
+// POST {project, prompt, key, userText}: streams the coach's answer as plain text and saves the exchange.
 // The page builds the canvas part of the prompt; the org context is added here, from the database.
 export default async function handler(req, res) {
   if (req.method !== "POST") return bad(res, "Method not allowed", 405);
@@ -11,7 +11,7 @@ export default async function handler(req, res) {
   if (!me) return;
   if (!process.env.ANTHROPIC_API_KEY) return bad(res, "המאמן עוד לא הוגדר (חסר ANTHROPIC_API_KEY)", 503);
 
-  const { project, prompt } = body(req);
+  const { project, prompt, key, userText } = body(req);
   const p = await getProject(String(project || ""));
   if (!p || !canSee(me, p)) return bad(res, "אין לכן גישה לפרויקט הזה", 404);
   if (typeof prompt !== "string" || !prompt.trim() || prompt.length > 40000) return bad(res, "בקשה לא תקינה");
@@ -32,8 +32,20 @@ ${org?.context ? "הקשר על הארגון והאסטרטגיה:\n" + org.cont
       system,
       messages: [{ role: "user", content: prompt }],
     });
-    stream.on("text", (t) => res.write(t));
+    let full = "";
+    stream.on("text", (t) => { full += t; try { res.write(t); } catch {} });
     await stream.finalMessage();
+    // keep the exchange so the conversation is there next time
+    const i = full.indexOf("###הצעה");
+    const text = (i < 0 ? full : full.slice(0, i)).trim();
+    const sugg = i < 0 ? null : full.slice(i + 7).trim() || null;
+    if (text && typeof userText === "string" && userText.trim()) {
+      const k = threadKey(String(project), me.id, key);
+      const at = Date.now();
+      await redis.rpush(k, { role: "me", text: userText.slice(0, 4000), at }, { role: "bot", text, sugg, at });
+      await redis.ltrim(k, -80, -1);
+      await redis.sadd(`coachkeys:${project}`, k);
+    }
   } catch (e) {
     res.write("\n\n[המאמן לא הצליח לענות כרגע. נסו שוב בעוד רגע.]");
     console.error("coach error", e?.status, e?.message);

@@ -98,7 +98,8 @@ export default async function handler(req, res) {
       const p = await getProject(b.id);
       if (!p) return bad(res, "הפרויקט לא נמצא", 404);
       if (!canManageOrg(me, p.org)) return bad(res, "אין הרשאה", 403);
-      await redis.del(`project:${b.id}`, `cells:${b.id}`);
+      const coachKeys = (await redis.smembers(`coachkeys:${b.id}`)) || [];
+      await redis.del(`project:${b.id}`, `cells:${b.id}`, `coachkeys:${b.id}`, ...coachKeys);
       await redis.srem("projects", b.id);
       return send(res, 200, { ok: true });
     }
