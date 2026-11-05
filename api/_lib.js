@@ -39,26 +39,35 @@ export function checkPassword(password, user) {
 /* ---------- sessions (signed cookie) ---------- */
 const COOKIE = "lc_s";
 const DAYS = 14;
-function secret() {
-  const s = process.env.SESSION_SECRET;
-  if (!s || s.length < 16) throw new Error("SESSION_SECRET is missing or too short");
-  return s;
+// The signing secret comes from SESSION_SECRET when set; otherwise one is generated
+// once and kept in the database, so no secret has to be configured by hand.
+let cachedSecret = null;
+async function secret() {
+  if (process.env.SESSION_SECRET && process.env.SESSION_SECRET.length >= 16) return process.env.SESSION_SECRET;
+  if (cachedSecret) return cachedSecret;
+  let s = await redis.get("config:session_secret");
+  if (!s) {
+    const fresh = crypto.randomBytes(32).toString("hex");
+    await redis.set("config:session_secret", fresh, { nx: true });
+    s = await redis.get("config:session_secret");
+  }
+  return (cachedSecret = String(s));
 }
-const sign = (data) => crypto.createHmac("sha256", secret()).update(data).digest("base64url");
-export function setSession(res, userId) {
+const sign = async (data) => crypto.createHmac("sha256", await secret()).update(data).digest("base64url");
+export async function setSession(res, userId) {
   const payload = Buffer.from(JSON.stringify({ u: userId, exp: Date.now() + DAYS * 864e5 })).toString("base64url");
-  const value = `${payload}.${sign(payload)}`;
+  const value = `${payload}.${await sign(payload)}`;
   res.setHeader("Set-Cookie", `${COOKIE}=${value}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${DAYS * 86400}`);
 }
 export function clearSession(res) {
   res.setHeader("Set-Cookie", `${COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`);
 }
-function readSession(req) {
+async function readSession(req) {
   const raw = (req.headers.cookie || "").split(/;\s*/).find((c) => c.startsWith(COOKIE + "="));
   if (!raw) return null;
   const [payload, sig] = raw.slice(COOKIE.length + 1).split(".");
   if (!payload || !sig) return null;
-  const expected = sign(payload);
+  const expected = await sign(payload);
   if (sig.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return null;
   try {
     const { u, exp } = JSON.parse(Buffer.from(payload, "base64url").toString());
@@ -81,7 +90,7 @@ export const publicUser = (u) => u && ({ id: u.id, name: u.name, role: u.role, o
 /** Returns the signed-in user (with id) or sends 401 and returns null. */
 export async function requireUser(req, res) {
   let id = null;
-  try { id = readSession(req); } catch (e) { bad(res, "השרת לא מוגדר עד הסוף (SESSION_SECRET)", 500); return null; }
+  try { id = await readSession(req); } catch (e) { bad(res, "אין חיבור למסד הנתונים. בדקו את חיבור Upstash ב-Vercel.", 500); return null; }
   const u = id ? await getUser(id) : null;
   if (!u) { bad(res, "צריך להתחבר", 401); return null; }
   return { id, ...u };

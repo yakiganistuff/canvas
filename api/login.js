@@ -17,6 +17,6 @@ export default async function handler(req, res) {
   }
   if (!user || !checkPassword(password, user)) return bad(res, "שם המשתמש או הסיסמה לא נכונים", 401);
 
-  setSession(res, id);
+  await setSession(res, id);
   send(res, 200, { me: publicUser({ id, ...user }) });
 }
