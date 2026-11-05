@@ -4,7 +4,7 @@ document.documentElement.lang = "he";
 document.documentElement.dir = "rtl";
 
 /* ---------------- canvas definition ---------------- */
-const KPI_ROWS = ["KPI תוצאה 1","KPI תוצאה 2","KPI התקדמות 1","KPI התקדמות 2"];
+const KPI_ROWS = ["KPI 1","KPI 2","KBI 1","KBI 2"];
 const KPI_COLS = [["name","שם המדד"],["base","בסיס"],["bench","בנצ׳מרק"],["y27","2027"],["y30","2030"]];
 const TL_COLS = ["H1 2027","H2 2027","2028","2029","2030"];
 const TL_ROWS = [["stage","שלב"],["output","תוצר"],["meet","נקודת מפגש"]];
@@ -19,8 +19,8 @@ const B = {
     coach:"החלק החשוב הוא 'לא אחראי על'. אם הוא ריק או כללי, דחוף לכתוב לפחות שני דברים קונקרטיים שהיוזמה לא תעשה ושיכולים להתבלבל איתה."},
   aud:{label:"במי זה נוגע", sec:"הסיפור", type:"text", hint:"מיפוי כל הקהלים",
     coach:"בדוק שהמיפוי כולל קהלים ישירים ועקיפים, מנהלים, עובדים, HR עצמו, ושותפים. שאל מי עלול להפסיד מהיוזמה ולהתנגד לה."},
-  kpi:{label:"המדידה", sec:"המדידה", type:"kpi", hint:"שני מדדי תוצאה ושני מדדי התקדמות, עם בסיס, בנצ׳מרק ויעדים",
-    coach:"הבחן בין מדד תוצאה (מה השתנה בארגון) למדד התקדמות (האם אנחנו מבצעים). כל מדד צריך בסיס ידוע, בנצ׳מרק עם מקור, ויעדים שאפתניים אך אפשריים. אם אין בסיס, זו משימה ראשונה."},
+  kpi:{label:"המדידה", sec:"המדידה", type:"kpi", hint:"שני KPIs (מדדי תוצאה) ושני KBIs (מדדי התנהגות), עם בסיס, בנצ׳מרק ויעדים",
+    coach:"הבחן בין KPI, מדד תוצאה (מה השתנה בארגון), לבין KBI, מדד התנהגות (אילו התנהגויות של מנהלים ועובדים צריכות להשתנות ואיך נראה שהן משתנות). KBI טוב מתאר התנהגות נצפית ונמדדת, לא תחושה. כל מדד צריך בסיס ידוע, בנצ׳מרק עם מקור, ויעדים שאפתניים אך אפשריים. אם אין בסיס, זו משימה ראשונה."},
   success:{label:"תמונת הצלחה 2030", sec:"המדידה", type:"text", hint:"מה יראו, ישמעו וימדדו בארגון, במשפט אחד",
     coach:"משפט אחד בלבד, מוחשי, שאפשר לצלם או לשמוע. אם זה נשמע כמו סיסמה, בקש דוגמה של רגע ספציפי ב-2030."},
   needs:{label:"צריך מ־", sec:"החיבורים", type:"fields", fields:[["what","מה ומאיזו יוזמה"],["when","עד מתי"]], hint:"מה · עד מתי",
@@ -378,7 +378,7 @@ function cell(k){
 }
 function kpiTable(){
   const v = getVal("kpi");
-  return `<div class="tw"><table class="grid"><thead><tr><th>KPI</th>${KPI_COLS.slice(1).map(c=>`<th>${c[1]}</th>`).join("")}</tr></thead><tbody>
+  return `<div class="tw"><table class="grid"><thead><tr><th>מדד</th>${KPI_COLS.slice(1).map(c=>`<th>${c[1]}</th>`).join("")}</tr></thead><tbody>
   ${KPI_ROWS.map((r,i) => `<tr><th>${esc(v[i]?.name || r)}</th>${KPI_COLS.slice(1).map(([c]) => `<td>${esc(v[i]?.[c]||"")}</td>`).join("")}</tr>`).join("")}
   </tbody></table></div>`;
 }
@@ -466,7 +466,7 @@ function editorHtml(){
   else if (t === "fields") body = `<div class="fields" style="display:grid;gap:14px">${b.fields.map(([f,l]) => `<div class="field"><label for="ed_${f}">${esc(l)}</label><textarea class="input" id="ed_${f}" data-f="${f}">${esc(draft[f]||"")}</textarea></div>`).join("")}</div>`;
   else if (t === "kpi") body = `<div class="tw"><table class="grid"><thead><tr>${KPI_COLS.map(c=>`<th>${c[1]}</th>`).join("")}</tr></thead><tbody>
     ${KPI_ROWS.map((r,i) => `<tr>${KPI_COLS.map(([c],j) => `<td class="${j===0?"rowname":""}"><input id="kpi_${i}_${c}" data-i="${i}" data-c="${c}" value="${esc(draft[i][c])}" placeholder="${j===0?esc(r):""}"></td>`).join("")}</tr>`).join("")}
-    </tbody></table></div><div class="meta">שתי השורות הראשונות למדדי תוצאה, השתיים האחרונות למדדי התקדמות.</div>`;
+    </tbody></table></div><div class="meta">שתי השורות הראשונות ל־KPIs (מדדי תוצאה), השתיים האחרונות ל־KBIs (מדדי התנהגות).</div>`;
   else if (t === "timeline") body = `<div class="tw"><table class="grid"><thead><tr><th></th>${TL_COLS.map(c=>`<th>${c}</th>`).join("")}</tr></thead><tbody>
     ${TL_ROWS.map(([r,l]) => `<tr><th>${l}</th>${TL_COLS.map((c,i) => `<td><input id="tl_${r}_${i}" data-r="${r}" data-i="${i}" value="${esc(draft[r][i]||"")}"></td>`).join("")}</tr>`).join("")}
     </tbody></table></div>`;
