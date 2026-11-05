@@ -1,0 +1,7 @@
+{
+  "framework": null,
+  "outputDirectory": "public",
+  "functions": {
+    "api/coach.js": { "maxDuration": 60 }
+  }
+}
