@@ -120,7 +120,7 @@ async function api(path, data){
   if (!r.ok) throw new Error(j.error || "משהו השתבש. נסו שוב.");
   return j;
 }
-const LOGO = `<img class="logo logo-light" src="/logo.svg" alt="STUFF"><img class="logo logo-dark" src="/logo-dark.svg" alt="STUFF">`;
+const LOGO = `<img class="logo logo-light" src="/logo.png" alt="STUFF"><img class="logo logo-dark" src="/logo-dark.png" alt="STUFF">`;
 
 /* ---------------- boot ---------------- */
 async function boot(){
@@ -135,7 +135,6 @@ function renderLogin(err){
   app.innerHTML = `
   <div class="login"><form class="login-card" id="loginForm" autocomplete="on">
     ${LOGO}
-    <h1>קנבס המנופים</h1>
     <p>כניסה עם שם המשתמש והסיסמה שקיבלתן.</p>
     <div class="field"><label for="lgName">שם משתמש</label><input class="input" id="lgName" name="username" autocomplete="username" dir="ltr" autocapitalize="off" spellcheck="false"></div>
     <div class="field"><label for="lgPass">סיסמה</label><input class="input" id="lgPass" name="password" autocomplete="current-password" type="password" dir="ltr"></div>
