@@ -176,6 +176,16 @@ select.input{appearance:auto}
 .btn.danger{background:transparent;color:var(--accent);border:1px solid var(--accent)}
 .inline{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .inline .input{width:auto;min-width:140px;padding:7px 10px;font-size:14px}
+.import{border:1px solid var(--line);border-radius:12px;background:var(--sheet)}
+.import summary{cursor:pointer;padding:12px 14px;font-weight:600}
+.import[open] summary{border-bottom:1px solid var(--line)}
+.imp-body{padding:12px 14px;display:grid;gap:10px}
+.imp-body textarea.input{min-height:130px;font-family:ui-monospace,Menlo,monospace;font-size:14px;text-align:left}
+.imp-body .r{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.imp-body .r .field{min-width:180px}
+.imp-table tr.bad td{color:var(--accent)}
+.imp-result{background:var(--band);border-radius:10px;padding:10px 12px;font-size:14px}
+.item .inline select.input{width:auto;min-width:110px;padding:6px 8px;font-size:14px}
 /* ---------- logo ---------- */
 .logo{height:26px;width:auto;display:block}
 .login-card .logo{height:46px;margin-bottom:6px}

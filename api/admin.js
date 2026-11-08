@@ -51,6 +51,47 @@ export default async function handler(req, res) {
       await redis.set(`user:${b.id}`, { ...u, ...hashPassword(b.password) });
       return send(res, 200, { ok: true });
     }
+    case "importUsers": {
+      // Bulk add: everyone is created as a regular user in one org. Existing usernames are skipped, never overwritten.
+      const org = isAdmin ? slug(b.org) : me.org;
+      if (!(await getOrg(org))) return bad(res, "צריך לבחור ארגון קיים");
+      const rows = Array.isArray(b.users) ? b.users.slice(0, 500) : [];
+      if (!rows.length) return bad(res, "הרשימה ריקה");
+      const created = [], skipped = [], seen = new Set();
+      for (const r of rows) {
+        const id = slug(r && r.id), password = String((r && r.password) || ""), name = String((r && r.name) || "").trim() || id;
+        if (!validId(id)) { skipped.push({ id: String(r && r.id || ""), reason: "שם משתמש לא תקין" }); continue; }
+        if (seen.has(id)) { skipped.push({ id, reason: "מופיע פעמיים ברשימה" }); continue; }
+        seen.add(id);
+        if (password.length < 6) { skipped.push({ id, reason: "סיסמה קצרה מ־6 תווים" }); continue; }
+        if (await getUser(id)) { skipped.push({ id, reason: "כבר קיים" }); continue; }
+        await redis.set(`user:${id}`, { name, role: "member", org, ...hashPassword(password), at: Date.now() });
+        await redis.sadd("users", id);
+        created.push(id);
+      }
+      return send(res, 200, { ok: true, created, skipped });
+    }
+    case "setRole": {
+      const u = await getUser(b.id);
+      if (!u) return bad(res, "המשתמש לא נמצא", 404);
+      if (b.id === me.id) return bad(res, "אי אפשר לשנות את התפקיד של עצמך");
+      const role = b.role;
+      if (!["member", "manager", "admin"].includes(role)) return bad(res, "תפקיד לא מוכר");
+      if (!isAdmin && (u.org !== me.org || u.role === "admin" || role === "admin")) return bad(res, "אין הרשאה", 403);
+      // org: admins have none; otherwise keep the current org unless an admin moves the user
+      let org = role === "admin" ? "" : (isAdmin && b.org ? slug(b.org) : u.org);
+      if (role !== "admin" && !(await getOrg(org))) return bad(res, "צריך לבחור ארגון למשתמש הזה");
+      await redis.set(`user:${b.id}`, { ...u, role, org });
+      if (org !== u.org) {
+        // leaving an org also removes the user from that org's projects
+        const projects = await getMany("project", "projects");
+        for (const p of projects.filter((p) => p.org !== org && (p.members || []).includes(b.id))) {
+          const { id, ...rest } = p;
+          await redis.set(`project:${id}`, { ...rest, members: rest.members.filter((m) => m !== b.id) });
+        }
+      }
+      return send(res, 200, { ok: true });
+    }
     case "deleteUser": {
       const u = await getUser(b.id);
       if (!u) return bad(res, "המשתמש לא נמצא", 404);

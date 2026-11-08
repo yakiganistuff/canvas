@@ -246,6 +246,31 @@ function projectsPane(){
     </div>`).join("")}
   </div>`;
 }
+let importText = "", importRows = [], importOrg = "", importResult = "", importOpen = false;
+function roleControl(u){
+  const editable = u.id !== me.id && (isAdmin() || u.role !== "admin");
+  if (!editable) return `<span class="role ${u.role}">${ROLE_LABEL[u.role]||u.role}</span>${isAdmin() && u.org ? `<span class="pill">${esc(orgs[u.org]?.name||u.org)}</span>` : ""}`;
+  const opts = isAdmin() ? [["member","משתמשת"],["manager","מנהלת"],["admin","אדמין"]] : [["member","משתמשת"],["manager","מנהלת"]];
+  return `<span class="inline">
+    <select class="input" id="role_${esc(u.id)}" data-act="role" aria-label="תפקיד של ${esc(u.name||u.id)}">${opts.map(([v,l]) => `<option value="${v}" ${v===u.role?"selected":""}>${l}</option>`).join("")}</select>
+    ${isAdmin() ? `<select class="input" id="org_${esc(u.id)}" data-act="org" aria-label="ארגון של ${esc(u.name||u.id)}" ${u.role==="admin"?"hidden":""}><option value="">בחירת ארגון</option>${orgOptions(u.org)}</select>` : ""}
+  </span>`;
+}
+function parseImport(text){
+  const known = new Set(userCache.map(u => u.id)), seen = new Set();
+  return text.split(/\r?\n/).map(l => l.trim()).filter(Boolean).map(line => {
+    const parts = (line.includes("\t") ? line.split("\t") : line.split(",")).map(s => s.trim());
+    const id = slugId(parts[0]), password = parts[1] || "", name = parts.slice(2).join(", ").trim();
+    let err = "";
+    if (!/^[a-z0-9][a-z0-9\-_]{1,39}$/.test(id)) err = "שם משתמש לא תקין (אנגלית, ספרות, מקף)";
+    else if (password.length < 6) err = "סיסמה קצרה מ־6 תווים";
+    else if (seen.has(id)) err = "מופיע פעמיים";
+    else if (known.has(id)) err = "כבר קיים, ידולג";
+    seen.add(id);
+    return { id, password, name, err };
+  });
+}
+const slugId = s => String(s||"").trim().toLowerCase().replace(/\s+/g, "-");
 function usersPane(){
   const defOrg = isAdmin() ? (Object.keys(orgs)[0] || "") : me.org;
   const list = [...userCache].sort((a,b) => ((a.org||"")+a.id).localeCompare((b.org||"")+b.id));
@@ -259,9 +284,25 @@ function usersPane(){
       ${isAdmin() ? `<div class="field"><label for="nuOrg">ארגון</label><select class="input" id="nuOrg">${orgOptions(defOrg)}</select></div>` : ""}
       <button class="btn small" type="submit">הוספת משתמש</button>
     </form>
+    <details class="import" id="impBox" ${importOpen ? "open" : ""}>
+      <summary>ייבוא רשימת משתמשים</summary>
+      <div class="imp-body">
+        <p class="meta">שורה לכל משתמש: <b>שם משתמש, סיסמה, שם לתצוגה</b>. אפשר להפריד בפסיק או להדביק שלוש עמודות מאקסל. כולם נוצרים כמשתמשים רגילים, ואת התפקיד משנים אחר כך ברשימה למטה. שמות משתמש שכבר קיימים מדולגים ולא נדרסים.</p>
+        <textarea class="input" id="impText" dir="ltr" spellcheck="false" placeholder="dana, Dana2026!, דנה כהן&#10;noa, Noa2026!, נועה לוי">${esc(importText)}</textarea>
+        <div class="r">
+          ${isAdmin() ? `<div class="field"><label for="impOrg">ארגון</label><select class="input" id="impOrg">${orgOptions(importOrg || defOrg)}</select></div>` : ""}
+          <button class="btn ghost small" type="button" id="impPreview">תצוגה מקדימה</button>
+          <button class="btn small" type="button" id="impGo" ${importRows.some(r => !r.err) ? "" : "disabled"}>${(n => n === 1 ? "ייבוא משתמש אחד" : n ? `ייבוא ${n} משתמשים` : "ייבוא")(importRows.filter(r => !r.err).length)}</button>
+        </div>
+        ${importRows.length ? `<div class="tw"><table class="grid imp-table"><thead><tr><th>שם משתמש</th><th>סיסמה</th><th>שם לתצוגה</th><th>סטטוס</th></tr></thead><tbody>
+          ${importRows.map(r => `<tr class="${r.err ? "bad" : ""}"><td dir="ltr">${esc(r.id)}</td><td dir="ltr">${r.password ? "•".repeat(Math.min(r.password.length, 10)) : ""}</td><td>${esc(r.name)}</td><td>${esc(r.err || "מוכן")}</td></tr>`).join("")}
+        </tbody></table></div>` : ""}
+        ${importResult ? `<div class="imp-result">${esc(importResult)}</div>` : ""}
+      </div>
+    </details>
     ${list.map(u => `<div class="item" data-uid="${esc(u.id)}">
-      <div class="top"><b>${esc(u.name||u.id)}</b><span class="meta" dir="ltr">${esc(u.id)}</span><span class="role ${u.role}">${ROLE_LABEL[u.role]||u.role}</span>
-        ${isAdmin() && u.org ? `<span class="pill">${esc(orgs[u.org]?.name||u.org)}</span>` : ""}<span class="sp"></span>
+      <div class="top"><b>${esc(u.name||u.id)}</b><span class="meta" dir="ltr">${esc(u.id)}</span>
+        ${roleControl(u)}<span class="sp"></span>
         ${u.id === me.id ? `<span class="meta">זה החשבון שלך</span>` : `
         ${(isAdmin() || u.role !== "admin") ? `<span class="inline"><input class="input" id="rp_${esc(u.id)}" dir="ltr" placeholder="סיסמה חדשה" autocomplete="new-password"><button class="btn ghost small" data-act="resetPass">איפוס</button></span>` : ""}
         ${(isAdmin() || u.role === "member") ? `<button class="btn danger small" data-act="delUser">מחיקה</button>` : ""}`}
@@ -318,8 +359,42 @@ function wireMgmt(){
       password: document.getElementById("nuPass").value, role: document.getElementById("nuRole").value,
       org: document.getElementById("nuOrg") ? document.getElementById("nuOrg").value : me.org }, "המשתמש נוסף");
   });
+  const impBox = document.getElementById("impBox");
+  if (impBox){
+    impBox.addEventListener("toggle", () => { importOpen = impBox.open; });
+    const txt = document.getElementById("impText"), orgSel = document.getElementById("impOrg");
+    txt.addEventListener("input", () => { importText = txt.value; });
+    if (orgSel) orgSel.onchange = () => { importOrg = orgSel.value; };
+    document.getElementById("impPreview").onclick = () => {
+      importText = txt.value; importOrg = orgSel ? orgSel.value : me.org; importResult = "";
+      importRows = parseImport(importText); mgmtTab = "users"; renderHome();
+    };
+    document.getElementById("impGo").onclick = async ev => {
+      const ready = importRows.filter(r => !r.err);
+      if (!ready.length) return;
+      const btn = ev.currentTarget; btn.disabled = true; btn.textContent = "מייבא…";
+      try{
+        const j = await api("/api/admin", { action: "importUsers", org: orgSel ? orgSel.value : me.org,
+          users: ready.map(r => ({ id: r.id, password: r.password, name: r.name })) });
+        importResult = `נוספו ${j.created.length} משתמשים` + (j.skipped.length ? `. דולגו ${j.skipped.length}: ` + j.skipped.map(s => `${s.id} (${s.reason})`).join(", ") : ".");
+        importText = ""; importRows = []; importOpen = true; mgmtTab = "users";
+        toast(`נוספו ${j.created.length} משתמשים`);
+        await goHome();
+      }catch(e){ toast(e.message); btn.disabled = false; btn.textContent = "ייבוא"; }
+    };
+  }
   app.querySelectorAll(".item[data-uid]").forEach(it => {
     const id = it.dataset.uid;
+    const rs = it.querySelector('[data-act="role"]'), os = it.querySelector('[data-act="org"]');
+    const applyRole = async () => {
+      const role = rs.value, org = os ? os.value : undefined;
+      if (os) os.hidden = role === "admin";
+      if (role !== "admin" && os && !org){ toast("בחרו ארגון למשתמש הזה"); os.focus(); return; }
+      mgmtTab = "users";
+      await act({ action: "setRole", id, role, org }, role === "admin" ? "התפקיד עודכן לאדמין" : role === "manager" ? "התפקיד עודכן למנהלת" : "התפקיד עודכן למשתמשת");
+    };
+    if (rs) rs.onchange = applyRole;
+    if (os) os.onchange = applyRole;
     const rp = it.querySelector('[data-act="resetPass"]');
     if (rp) rp.onclick = async () => {
       const inp = document.getElementById("rp_" + id);
