@@ -1,11 +1,12 @@
 import { redis, send, bad, body, slug, validId, validUserId, makePassword, makeId, requireUser, getUser, getOrg, getProject, getMany, hashPassword, canManageOrg } from "./_lib.js";
 
-// POST {action, ...}: management for admins (everything) and managers (their own org).
+// POST {action, ...}: all management (orgs, users, projects, roles, passwords) is admin-only.
+// Managers see every project in their org and edit canvases, but manage nothing.
 export default async function handler(req, res) {
   if (req.method !== "POST") return bad(res, "Method not allowed", 405);
   const me = await requireUser(req, res);
   if (!me) return;
-  if (me.role !== "admin" && me.role !== "manager") return bad(res, "אין הרשאה", 403);
+  if (me.role !== "admin") return bad(res, "רק אדמין יכול לנהל ארגונים, משתמשים ופרויקטים", 403);
   const b = body(req);
   const isAdmin = me.role === "admin";
 

@@ -201,12 +201,12 @@ function renderHome(){
         ${isAdmin() ? `<h2 class="orgh">${esc(orgs[o]?.name || o)} <span class="meta">${groups[o].length} פרויקטים</span></h2>` : ""}
         <div class="cards">${groups[o].sort((a,b)=>(a.name||a.id).localeCompare(b.name||b.id,"he")).map(cardHtml).join("")}</div>
       </section>`).join("")
-    : `<div class="emptybox">${isAdmin() ? "עדיין אין פרויקטים. צרו ארגון, משתמשים ופרויקט בניהול למטה." : isManager() ? "עדיין אין פרויקטים בארגון. אפשר ליצור אותם בניהול למטה." : "עדיין לא שויכתן לפרויקט. בקשו מהמנחה לשייך אתכן."}</div>`}
-    ${(isAdmin() || isManager()) ? mgmtHtml() : ""}
+    : `<div class="emptybox">${isAdmin() ? "עדיין אין פרויקטים. צרו ארגון, משתמשים ופרויקט בניהול למטה." : isManager() ? "עדיין אין פרויקטים בארגון. המנחה יפתח אותם." : "עדיין לא שויכתן לפרויקט. בקשו מהמנחה לשייך אתכן."}</div>`}
+    ${isAdmin() ? mgmtHtml() : ""}
   </div>`;
   document.getElementById("outBtn").onclick = logout;
   app.querySelectorAll(".pcard[data-p]").forEach(el => el.onclick = () => openProject(el.dataset.p));
-  if (isAdmin() || isManager()) wireMgmt();
+  if (isAdmin()) wireMgmt();
 }
 
 /* ---------------- management ---------------- */
