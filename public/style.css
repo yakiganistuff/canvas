@@ -186,6 +186,9 @@ select.input{appearance:auto}
 .imp-table tr.bad td{color:var(--accent)}
 .imp-result{background:var(--band);border-radius:10px;padding:10px 12px;font-size:14px}
 .item .inline select.input{width:auto;min-width:110px;padding:6px 8px;font-size:14px}
+.queue{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;background:var(--accent-soft);border-radius:12px;padding:10px 14px;font-weight:600}
+.issued{display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:var(--band);border-radius:10px;padding:8px 12px;font-size:14px}
+.issued code{font-family:ui-monospace,Menlo,monospace;font-size:15px;font-weight:700;background:var(--sheet);border:1px solid var(--line);border-radius:6px;padding:2px 8px;user-select:all}
 /* ---------- logo ---------- */
 .logo{height:26px;width:auto;display:block}
 .login-card .logo{height:46px;margin-bottom:6px}

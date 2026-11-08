@@ -135,8 +135,8 @@ function renderLogin(err){
   app.innerHTML = `
   <div class="login"><form class="login-card" id="loginForm" autocomplete="on">
     ${LOGO}
-    <p>כניסה עם שם המשתמש והסיסמה שקיבלתן.</p>
-    <div class="field"><label for="lgName">שם משתמש</label><input class="input" id="lgName" name="username" autocomplete="username" dir="ltr" autocapitalize="off" spellcheck="false"></div>
+    <p>כניסה עם המייל והסיסמה שקיבלתן.</p>
+    <div class="field"><label for="lgName">מייל</label><input class="input" id="lgName" name="username" autocomplete="username" inputmode="email" dir="ltr" autocapitalize="off" spellcheck="false"></div>
     <div class="field"><label for="lgPass">סיסמה</label><input class="input" id="lgPass" name="password" autocomplete="current-password" type="password" dir="ltr"></div>
     <div class="err" id="lgErr">${esc(err||"")}</div>
     <button class="btn" type="submit" id="lgBtn">כניסה</button>
@@ -247,6 +247,40 @@ function projectsPane(){
   </div>`;
 }
 let importText = "", importRows = [], importOrg = "", importResult = "", importOpen = false;
+let lastIssued = null; // {id, name, password}: shown once, in memory only
+const canSend = u => u.id !== me.id && isEmailAddr(u.id) && (isAdmin() || u.role !== "admin");
+const pendingSend = () => [...userCache].filter(u => canSend(u) && !u.sentAt).sort((a,b) => (a.name||a.id).localeCompare(b.name||b.id, "he"));
+function sendControl(u){
+  if (!canSend(u)) return "";
+  return `<span class="inline">
+    ${u.sentAt ? `<span class="meta">סיסמה נשלחה ${dateStr(u.sentAt)}</span>` : ""}
+    <button class="btn ${u.sentAt ? "ghost" : ""} small" data-act="sendPw" title="יוצר סיסמה חדשה ופותח מייל מוכן לשליחה">${u.sentAt ? "שליחה מחדש" : "שליחת סיסמה"}</button>
+  </span>`;
+}
+function mailFor(rec){
+  const site = location.origin;
+  const subject = "פרטי הכניסה לקנבס המנופים · STUFF";
+  const body = [`שלום ${rec.name},`, "", "אלה פרטי הכניסה שלך לקנבס המנופים:", "",
+    `כתובת: ${site}`, `מייל: ${rec.id}`, `סיסמה: ${rec.password}`, "",
+    "אחרי הכניסה יופיעו הפרויקטים שלך. לחיצה כפולה על קוביה בקנבס פותחת אותה לכתיבה, ובתוך כל קוביה יש כפתור \"המאמן\" שעוזר לחדד.", "",
+    "נתראה,", me.name || "STUFF"].join("\r\n");
+  return `mailto:${rec.id}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+function openMail(rec){
+  const a = document.createElement("a"); a.href = mailFor(rec); a.style.display = "none";
+  document.body.appendChild(a); a.click(); a.remove();
+}
+async function issueAndMail(id){
+  try{
+    const r = await api("/api/admin", { action: "issuePassword", id });
+    lastIssued = r;
+    const u = userCache.find(x => x.id === id); if (u) u.sentAt = Date.now();
+    openMail(r);
+    mgmtTab = "users"; renderHome();
+    document.querySelector(`.item[data-uid="${CSS.escape(id)}"]`)?.scrollIntoView({ block: "center" });
+    toast("נפתח מייל מוכן. נשאר רק ללחוץ שליחה.");
+  }catch(e){ toast(e.message); }
+}
 function roleControl(u){
   const editable = u.id !== me.id && (isAdmin() || u.role !== "admin");
   if (!editable) return `<span class="role ${u.role}">${ROLE_LABEL[u.role]||u.role}</span>${isAdmin() && u.org ? `<span class="pill">${esc(orgs[u.org]?.name||u.org)}</span>` : ""}`;
@@ -260,16 +294,16 @@ function parseImport(text){
   const known = new Set(userCache.map(u => u.id)), seen = new Set();
   return text.split(/\r?\n/).map(l => l.trim()).filter(Boolean).map(line => {
     const parts = (line.includes("\t") ? line.split("\t") : line.split(",")).map(s => s.trim());
-    const id = slugId(parts[0]), password = parts[1] || "", name = parts.slice(2).join(", ").trim();
+    const id = slugId(parts[0]), name = parts.slice(1).join(", ").trim();
     let err = "";
-    if (!/^[a-z0-9][a-z0-9\-_]{1,39}$/.test(id)) err = "שם משתמש לא תקין (אנגלית, ספרות, מקף)";
-    else if (password.length < 6) err = "סיסמה קצרה מ־6 תווים";
+    if (!isEmailAddr(id)) err = "מייל לא תקין";
     else if (seen.has(id)) err = "מופיע פעמיים";
     else if (known.has(id)) err = "כבר קיים, ידולג";
     seen.add(id);
-    return { id, password, name, err };
+    return { id, name, err };
   });
 }
+const isEmailAddr = s => /^[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}$/.test(s);
 const slugId = s => String(s||"").trim().toLowerCase().replace(/\s+/g, "-");
 function usersPane(){
   const defOrg = isAdmin() ? (Object.keys(orgs)[0] || "") : me.org;
@@ -277,9 +311,8 @@ function usersPane(){
   const roleOpts = isAdmin() ? [["member","משתמשת"],["manager","מנהלת"],["admin","אדמין"]] : [["member","משתמשת"],["manager","מנהלת"]];
   return `<div class="list">
     <form class="formrow" id="nuForm" autocomplete="off">
-      <div class="field"><label for="nuId">שם משתמש (באנגלית)</label><input class="input" id="nuId" dir="ltr" placeholder="dana"></div>
+      <div class="field"><label for="nuId">מייל</label><input class="input" id="nuId" type="email" dir="ltr" placeholder="dana@strauss.co.il"></div>
       <div class="field"><label for="nuName">שם לתצוגה</label><input class="input" id="nuName" placeholder="דנה כהן"></div>
-      <div class="field"><label for="nuPass">סיסמה</label><input class="input" id="nuPass" dir="ltr" autocomplete="new-password"></div>
       <div class="field"><label for="nuRole">תפקיד</label><select class="input" id="nuRole">${roleOpts.map(([v,l])=>`<option value="${v}">${l}</option>`).join("")}</select></div>
       ${isAdmin() ? `<div class="field"><label for="nuOrg">ארגון</label><select class="input" id="nuOrg">${orgOptions(defOrg)}</select></div>` : ""}
       <button class="btn small" type="submit">הוספת משתמש</button>
@@ -287,26 +320,30 @@ function usersPane(){
     <details class="import" id="impBox" ${importOpen ? "open" : ""}>
       <summary>ייבוא רשימת משתמשים</summary>
       <div class="imp-body">
-        <p class="meta">שורה לכל משתמש: <b>שם משתמש, סיסמה, שם לתצוגה</b>. אפשר להפריד בפסיק או להדביק שלוש עמודות מאקסל. כולם נוצרים כמשתמשים רגילים, ואת התפקיד משנים אחר כך ברשימה למטה. שמות משתמש שכבר קיימים מדולגים ולא נדרסים.</p>
-        <textarea class="input" id="impText" dir="ltr" spellcheck="false" placeholder="dana, Dana2026!, דנה כהן&#10;noa, Noa2026!, נועה לוי">${esc(importText)}</textarea>
+        <p class="meta">שורה לכל משתמש: <b>מייל, שם לתצוגה</b>. אפשר להפריד בפסיק או להדביק שתי עמודות מאקסל. הסיסמאות נוצרות אוטומטית ונשלחות בכפתור "שליחת סיסמה". כולם נוצרים כמשתמשים רגילים, ואת התפקיד משנים ברשימה למטה. מיילים שכבר קיימים מדולגים.</p>
+        <textarea class="input" id="impText" dir="ltr" spellcheck="false" placeholder="dana@strauss.co.il, דנה כהן&#10;noa@strauss.co.il, נועה לוי">${esc(importText)}</textarea>
         <div class="r">
           ${isAdmin() ? `<div class="field"><label for="impOrg">ארגון</label><select class="input" id="impOrg">${orgOptions(importOrg || defOrg)}</select></div>` : ""}
           <button class="btn ghost small" type="button" id="impPreview">תצוגה מקדימה</button>
           <button class="btn small" type="button" id="impGo" ${importRows.some(r => !r.err) ? "" : "disabled"}>${(n => n === 1 ? "ייבוא משתמש אחד" : n ? `ייבוא ${n} משתמשים` : "ייבוא")(importRows.filter(r => !r.err).length)}</button>
         </div>
-        ${importRows.length ? `<div class="tw"><table class="grid imp-table"><thead><tr><th>שם משתמש</th><th>סיסמה</th><th>שם לתצוגה</th><th>סטטוס</th></tr></thead><tbody>
-          ${importRows.map(r => `<tr class="${r.err ? "bad" : ""}"><td dir="ltr">${esc(r.id)}</td><td dir="ltr">${r.password ? "•".repeat(Math.min(r.password.length, 10)) : ""}</td><td>${esc(r.name)}</td><td>${esc(r.err || "מוכן")}</td></tr>`).join("")}
+        ${importRows.length ? `<div class="tw"><table class="grid imp-table"><thead><tr><th>מייל</th><th>שם לתצוגה</th><th>סטטוס</th></tr></thead><tbody>
+          ${importRows.map(r => `<tr class="${r.err ? "bad" : ""}"><td dir="ltr">${esc(r.id)}</td><td>${esc(r.name)}</td><td>${esc(r.err || "מוכן")}</td></tr>`).join("")}
         </tbody></table></div>` : ""}
         ${importResult ? `<div class="imp-result">${esc(importResult)}</div>` : ""}
       </div>
     </details>
+    ${(n => n ? `<div class="queue"><span>${n === 1 ? "משתמש אחד עוד לא קיבל סיסמה" : `${n} משתמשים עוד לא קיבלו סיסמה`}</span><button class="btn small" id="sendNext">שליחה לבא בתור</button></div>` : "")(pendingSend().length)}
     ${list.map(u => `<div class="item" data-uid="${esc(u.id)}">
       <div class="top"><b>${esc(u.name||u.id)}</b><span class="meta" dir="ltr">${esc(u.id)}</span>
         ${roleControl(u)}<span class="sp"></span>
         ${u.id === me.id ? `<span class="meta">זה החשבון שלך</span>` : `
-        ${(isAdmin() || u.role !== "admin") ? `<span class="inline"><input class="input" id="rp_${esc(u.id)}" dir="ltr" placeholder="סיסמה חדשה" autocomplete="new-password"><button class="btn ghost small" data-act="resetPass">איפוס</button></span>` : ""}
+        ${(isAdmin() || u.role !== "admin") ? sendControl(u) : ""}
         ${(isAdmin() || u.role === "member") ? `<button class="btn danger small" data-act="delUser">מחיקה</button>` : ""}`}
-      </div></div>`).join("")}
+      </div>${lastIssued && lastIssued.id === u.id ? `<div class="issued">
+        <span>הסיסמה החדשה של ${esc(lastIssued.name)}:</span><code dir="ltr" id="issuedPw">${esc(lastIssued.password)}</code>
+        <button class="btn ghost small" data-act="copyPw">העתקה</button><button class="btn ghost small" data-act="reopenMail">פתיחת המייל שוב</button>
+        <span class="meta">מוצגת רק עכשיו. אחרי רענון הדף היא לא תופיע שוב.</span></div>` : ""}</div>`).join("")}
   </div>`;
 }
 function orgsPane(){
@@ -356,9 +393,11 @@ function wireMgmt(){
   if (nu) nu.addEventListener("submit", e => {
     e.preventDefault(); mgmtTab = "users";
     act({ action: "createUser", id: document.getElementById("nuId").value, name: document.getElementById("nuName").value,
-      password: document.getElementById("nuPass").value, role: document.getElementById("nuRole").value,
+      role: document.getElementById("nuRole").value,
       org: document.getElementById("nuOrg") ? document.getElementById("nuOrg").value : me.org }, "המשתמש נוסף");
   });
+  const sn = document.getElementById("sendNext");
+  if (sn) sn.onclick = () => { const next = pendingSend()[0]; if (next) issueAndMail(next.id); };
   const impBox = document.getElementById("impBox");
   if (impBox){
     impBox.addEventListener("toggle", () => { importOpen = impBox.open; });
@@ -375,7 +414,7 @@ function wireMgmt(){
       const btn = ev.currentTarget; btn.disabled = true; btn.textContent = "מייבא…";
       try{
         const j = await api("/api/admin", { action: "importUsers", org: orgSel ? orgSel.value : me.org,
-          users: ready.map(r => ({ id: r.id, password: r.password, name: r.name })) });
+          users: ready.map(r => ({ id: r.id, name: r.name })) });
         importResult = `נוספו ${j.created.length} משתמשים` + (j.skipped.length ? `. דולגו ${j.skipped.length}: ` + j.skipped.map(s => `${s.id} (${s.reason})`).join(", ") : ".");
         importText = ""; importRows = []; importOpen = true; mgmtTab = "users";
         toast(`נוספו ${j.created.length} משתמשים`);
@@ -395,6 +434,19 @@ function wireMgmt(){
     };
     if (rs) rs.onchange = applyRole;
     if (os) os.onchange = applyRole;
+    const sp = it.querySelector('[data-act="sendPw"]');
+    if (sp) sp.onclick = ev => {
+      const u = userCache.find(x => x.id === id);
+      if (u && u.sentAt && !confirmTwice(ev.currentTarget, "s:" + id)) return; // resending replaces the old password
+      issueAndMail(id);
+    };
+    const cp = it.querySelector('[data-act="copyPw"]');
+    if (cp) cp.onclick = async () => {
+      try{ await navigator.clipboard.writeText(lastIssued.password); toast("הסיסמה הועתקה"); }
+      catch(e){ const r = document.createRange(); r.selectNodeContents(document.getElementById("issuedPw")); const s = getSelection(); s.removeAllRanges(); s.addRange(r); }
+    };
+    const ro = it.querySelector('[data-act="reopenMail"]');
+    if (ro) ro.onclick = () => openMail(lastIssued);
     const rp = it.querySelector('[data-act="resetPass"]');
     if (rp) rp.onclick = async () => {
       const inp = document.getElementById("rp_" + id);

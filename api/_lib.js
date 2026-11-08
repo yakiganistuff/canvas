@@ -23,6 +23,18 @@ export function body(req) {
   try { return JSON.parse(req.body || "{}"); } catch { return {}; }
 }
 export const validId = (s) => typeof s === "string" && /^[a-z0-9][a-z0-9\-_]{1,39}$/.test(s);
+/** Usernames are email addresses (older short usernames such as "yaki" stay valid). */
+export const isEmail = (s) => typeof s === "string" && s.length <= 120 && /^[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}$/.test(s);
+export const validUserId = (s) => validId(s) || isEmail(s);
+/** A strong, easy-to-type password like "Hk7m-Q3tz-9Rwp" (no look-alike characters). */
+export function makePassword() {
+  const lower = "abcdefghjkmnpqrstuvwxyz", upper = "ABCDEFGHJKLMNPQRSTUVWXYZ", digit = "23456789", all = lower + upper + digit;
+  for (;;) {
+    const chars = Array.from({ length: 12 }, () => all[crypto.randomInt(all.length)]);
+    const p = chars.join("");
+    if (/[a-z]/.test(p) && /[A-Z]/.test(p) && /[0-9]/.test(p)) return `${p.slice(0, 4)}-${p.slice(4, 8)}-${p.slice(8)}`;
+  }
+}
 export const slug = (s) => String(s || "").trim().toLowerCase().replace(/\s+/g, "-");
 /** Builds a valid id from any text (Hebrew included); falls back to prefix + random. */
 export function makeId(text, prefix) {
@@ -90,7 +102,7 @@ export async function getMany(prefix, setKey) {
   const vals = await redis.mget(...ids.map((i) => `${prefix}:${i}`));
   return ids.map((id, i) => (vals[i] ? { id, ...vals[i] } : null)).filter(Boolean);
 }
-export const publicUser = (u) => u && ({ id: u.id, name: u.name, role: u.role, org: u.org || "" });
+export const publicUser = (u) => u && ({ id: u.id, name: u.name, role: u.role, org: u.org || "", sentAt: u.sentAt || 0 });
 
 /** Returns the signed-in user (with id) or sends 401 and returns null. */
 export async function requireUser(req, res) {

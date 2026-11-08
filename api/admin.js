@@ -1,4 +1,4 @@
-import { redis, send, bad, body, slug, validId, makeId, requireUser, getUser, getOrg, getProject, getMany, hashPassword, canManageOrg } from "./_lib.js";
+import { redis, send, bad, body, slug, validId, validUserId, makePassword, makeId, requireUser, getUser, getOrg, getProject, getMany, hashPassword, canManageOrg } from "./_lib.js";
 
 // POST {action, ...}: management for admins (everything) and managers (their own org).
 export default async function handler(req, res) {
@@ -32,16 +32,26 @@ export default async function handler(req, res) {
     /* ----- users ----- */
     case "createUser": {
       const id = slug(b.id), name = String(b.name || "").trim() || id, role = b.role;
-      if (!validId(id)) return bad(res, "שם המשתמש צריך להיות באנגלית: אותיות, ספרות ומקף, לפחות 2 תווים");
-      if (!b.password || String(b.password).length < 6) return bad(res, "סיסמה של 6 תווים לפחות");
+      if (!validUserId(id)) return bad(res, "שם המשתמש צריך להיות כתובת מייל תקינה");
+      if (b.password && String(b.password).length < 6) return bad(res, "סיסמה של 6 תווים לפחות");
       if (!["member", "manager", "admin"].includes(role)) return bad(res, "תפקיד לא מוכר");
       if (!isAdmin && role === "admin") return bad(res, "אין הרשאה", 403);
       const org = role === "admin" ? "" : (isAdmin ? slug(b.org) : me.org);
       if (role !== "admin" && !(await getOrg(org))) return bad(res, "צריך לבחור ארגון קיים");
       if (await getUser(id)) return bad(res, "שם המשתמש הזה כבר תפוס");
-      await redis.set(`user:${id}`, { name, role, org, ...hashPassword(b.password), at: Date.now() });
+      await redis.set(`user:${id}`, { name, role, org, ...hashPassword(b.password || makePassword()), at: Date.now() });
       await redis.sadd("users", id);
       return send(res, 200, { ok: true });
+    }
+    case "issuePassword": {
+      // Creates a fresh password, stores only its hash, and returns it once so the page can open an email with it.
+      const u = await getUser(b.id);
+      if (!u) return bad(res, "המשתמש לא נמצא", 404);
+      if (b.id === me.id) return bad(res, "את הסיסמה שלך לא שולחים מכאן");
+      if (!isAdmin && (u.org !== me.org || u.role === "admin")) return bad(res, "אין הרשאה", 403);
+      const password = makePassword();
+      await redis.set(`user:${b.id}`, { ...u, ...hashPassword(password), sentAt: Date.now() });
+      return send(res, 200, { id: b.id, name: u.name || b.id, password });
     }
     case "resetPassword": {
       const u = await getUser(b.id);
@@ -59,8 +69,8 @@ export default async function handler(req, res) {
       if (!rows.length) return bad(res, "הרשימה ריקה");
       const created = [], skipped = [], seen = new Set();
       for (const r of rows) {
-        const id = slug(r && r.id), password = String((r && r.password) || ""), name = String((r && r.name) || "").trim() || id;
-        if (!validId(id)) { skipped.push({ id: String(r && r.id || ""), reason: "שם משתמש לא תקין" }); continue; }
+        const id = slug(r && r.id), password = String((r && r.password) || "") || makePassword(), name = String((r && r.name) || "").trim() || id;
+        if (!validUserId(id)) { skipped.push({ id: String(r && r.id || ""), reason: "מייל לא תקין" }); continue; }
         if (seen.has(id)) { skipped.push({ id, reason: "מופיע פעמיים ברשימה" }); continue; }
         seen.add(id);
         if (password.length < 6) { skipped.push({ id, reason: "סיסמה קצרה מ־6 תווים" }); continue; }
